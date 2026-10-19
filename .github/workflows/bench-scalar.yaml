@@ -1,0 +1,35 @@
+name: noderesources test and benchmark (fork only)
+
+on:
+  push:
+    branches:
+      - ci/bench-scalar-resources
+
+permissions: read-all
+
+jobs:
+  bench:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      PKG: ./pkg/scheduler/framework/plugins/noderesources/
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 3
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: .go-version
+          cache: false
+      - name: Unit tests
+        run: go test -count=1 $PKG
+      - name: Benchmark after
+        run: go test -run='^$' -bench=BenchmarkTestFitScore -benchmem -count=10 $PKG | tee /tmp/after.txt
+      - name: Benchmark before
+        run: |
+          git checkout HEAD~2 -- pkg/scheduler/framework/plugins/noderesources/
+          go test -run='^$' -bench=BenchmarkTestFitScore -benchmem -count=10 $PKG | tee /tmp/before.txt
+      - name: Compare
+        run: |
+          go install golang.org/x/perf/cmd/benchstat@latest
+          $(go env GOPATH)/bin/benchstat /tmp/before.txt /tmp/after.txt | tee -a $GITHUB_STEP_SUMMARY
